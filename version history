@@ -1,0 +1,15 @@
+20201224 initial release
+working:
+- receives fix information from GPS receiver u-blox NEO-M8N-0-10
+- extracts time information and calculates maidenhead locator from GPS position
+- decides whether to transmit or not depending on the timestamp
+- uses Si5351A to send data stored in the tx_buffer
+
+not working, buggy:
+- calculate tx_buffer from given callsign, maidenhead locator and tx_pwr in dBm (fixed buffer so far, crashes when not commenting JTEncode.wspr_encode() out)
+
+todo:
+- display data on TFT display (all debugging and troubleshooting is being done using the serial monitor)
+- add 1 button to toggle tx_enabled
+- add 2 buttons to select frequency band
+- extract JTEncode functionality to shrink code size (uses ~ 20 kB of 30 kB)

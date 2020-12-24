@@ -1,0 +1,18 @@
+WSPR beacon
+by DL4OCE
+
+1. pre-reqs
+
+1.1 hardware
+- Arduino nano 32 kB
+- Si5351A board
+- GPS board u-blox
+- LPF for the desired frequency band (do not transmit without it, see your country's regularities)
+- SSD1306 controlled TFT display (128x32 px)
+
+1.2 arduino libs
+- Etherkit JTEncode
+- Etherkit Si5351
+- NeoGPS
+
+This is not fully working, yet, and still under development!

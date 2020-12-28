@@ -1,47 +1,34 @@
-#include <SoftwareSerial.h>
-#include "Wire.h"
+//#include "Wire.h"
 #include <si5351.h>
 Si5351 si5351;
+//#include <SPI.h>
 
 #include <JTEncode.h>
 //#include <rs_common.h>
 //#include <int.h>
-#include <string.h>
+//#include <string.h>
 //#define WSPR_DEFAULT_FREQ       14097200UL
 JTEncode jtencode;
 
-#include <NMEAGPS.h>
-//using namespace NeoGPS;
-NMEAGPS gps;
-gps_fix fix;
+#include <SoftwareSerial.h>
+SoftwareSerial gpsSerial(3, 4);
+String gps_time, gps_date, gps_ns, gps_ew, gps_alt, gps_sats, gps_status, gps_strLat, gps_strLon;
+double lat=0.0, lon=0.0;
 
 //#include <U8g2lib.h>
 //U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 boolean tx_even = true, 
-//        tx_enabled = true,
         tx_enabled = false,
         txing = false,
         toggle_gps_fix = false;
 char  strCallsign[7] = "DL4OCE",
       strLocator[5] = "XX00",
       strFullLocator[10];
-
-/*
- * DL4OCE JO52 11
- * uint8_t tx_buffer[255] = {
-  1, 1, 0, 0, 0, 0, 2, 2, 1, 2, 2, 2, 3, 3, 1, 0, 2, 0, 3, 2, 0, 1, 2, 3, 1, 1, 1, 2, 2, 2,
-  0, 2, 2, 2, 1, 2, 0, 3, 0, 3, 2, 2, 2, 2, 2, 2, 1, 0, 1, 3, 2, 0, 1, 3, 0, 3, 0, 2, 2, 1,
-  3, 0, 1, 0, 2, 0, 2, 1, 3, 2, 3, 0, 1, 2, 1, 0, 1, 0, 2, 1, 2, 0, 3, 0, 3, 1, 2, 0, 2, 3,
-  1, 2, 3, 2, 3, 2, 2, 2, 1, 2, 2, 2, 0, 0, 3, 2, 2, 1, 0, 0, 1, 3, 3, 0, 1, 1, 2, 0, 3, 3,
-  0, 1, 0, 0, 2, 3, 1, 1, 0, 2, 2, 0, 0, 3, 2, 1, 2, 2, 1, 1, 0, 2, 2, 2, 0, 0, 2, 3, 3, 0,
-  1, 0, 3, 3, 2, 2, 0, 3, 1, 2, 0, 2
-  };
-*/
       
-//uint8_t tx_buffer[255];
-uint8_t tx_buffer[WSPR_SYMBOL_COUNT]; // 162
-//uint16_t tone_delay, tone_spacing;
+//uint8_t tx_buffer[WSPR_SYMBOL_COUNT]; // 162
+uint8_t tx_buffer[255];
+
 uint8_t pwr_output = 11; // Si5351 will put ~ 11 dBm out
 long  intBaseFrequency = 7040000,
       intTxFrequency = intBaseFrequency;
@@ -62,8 +49,6 @@ long  intBaseFrequency = 7040000,
 2m 144.488500 144.489900 - 144.490100
  */
 
-SoftwareSerial gpsSerial(3, 4);
-
 boolean debugging_enabled = true;
 
 void debug(String message){
@@ -79,9 +64,7 @@ void setup() {
   // Begin serial communication with Arduino and GPS module. Rate must be 9600
   // D3=TX-Arduino to RX-GPS, D4=RX-Arduino to TX-GPS
   gpsSerial.begin(9600);
-
-  //Serial.println("WSPR beacon tbased on u-blox NEO-M8N-0-10");
-  debug("WSPR beacon based on u-blox NEO-M8N-0-10\n");
+  debug("\nWSPR beacon based on u-blox NEO-M8N-0-10\n");
 
   // Initialize the Si5351
   // Change the 2nd parameter in init if using a ref osc other than 25 MHz
@@ -134,19 +117,19 @@ void updateLCD(){
   debug("[updateLCD]\n");
   //String tmpLoc = "";
   tmpStr += (String)strCallsign + " " + (String)strLocator + " "; 
-  if (fix.valid.location) tmpStr += "G";
-  else tmpStr += "g";
+//  if (fix.valid.location) tmpStr += "G";
+//  else tmpStr += "g";
   if (tx_enabled && !txing) tmpStr += "t";
   else if (tx_enabled & txing) tmpStr += "T";
   else tmpStr += "_";
   debug(tmpStr+"\n");
   tmpStr = "";
-  if (fix.dateTime.hours < 10) tmpStr += "0";
+/*  if (fix.dateTime.hours < 10) tmpStr += "0";
   tmpStr += (String)fix.dateTime.hours + ":";
   if (fix.dateTime.minutes < 10) tmpStr += "0";
   tmpStr += (String)fix.dateTime.minutes + ":";
   if (fix.dateTime.seconds < 10) tmpStr += "0";
-  tmpStr += (String)fix.dateTime.seconds + " ";
+  tmpStr += (String)fix.dateTime.seconds + " ";*/
   tmpStr += (String) pwr_output + " dBm\n";
   debug(tmpStr+"\n");
 
@@ -166,6 +149,7 @@ void updateLCD(){
 
 void do_WSPR(){
   uint8_t i;
+  debug("do_WSPR()\n");
   if (tx_enabled){
     debug("Starting transmission on Base=" + (String)intBaseFrequency + ", TxFreq=" + (String)intTxFrequency);
     // Reset the tone to the base frequency and turn on the output
@@ -182,86 +166,96 @@ void do_WSPR(){
   }
 }
 
-void set_tx_buffer(){
-//  memset(tx_buffer, 0, 255);  
-  memset(tx_buffer, 0, WSPR_SYMBOL_COUNT);  
-/*  debug((String)sizeof(strCallsign) + ", ");
-  debug((String)sizeof(strLocator) + ", ");
-  debug((String)pwr_output + ", ");
-  debug((String)sizeof(tx_buffer) + "\n");*/
-  //jtencode.wspr_encode(strCallsign, strLocator, pwr_output, tx_buffer);
-  //jtencode.wspr_encode("DL4OCE", "JO52", 11, tx_buffer);
-}
-
 void generateWSPRbuffer(float tmpLat, float tmpLon){
-//  String tmpStr="";
   debug("\n[generateWSPRbuffer]\n");
- /* debug((String)tmpLat);
-  debug(" ");
-  debug((String)tmpLon);
-  debug(" ");
-*/  
   calcLocator(strFullLocator, tmpLat, tmpLon);
   strncpy(strLocator, strFullLocator, 4);
-  strLocator[5] = char(0);
+  //strLocator[5] = char(0);
   //strncpy(strFullLocator, strFullLocator, 7);
   //strFullLocator[]="JO52ff";
-/*  debug(strCallsign);
+  debug(strCallsign);
   debug(" ");
   debug(strLocator);
   debug(" ");
   debug((String)pwr_output);
   debug("\n");
   debug("Maidenhead locator: ");
-  debug(strFullLocator); */
-//  debug((String)tmpStr);
-//  debug("\n");
-  set_tx_buffer();
-
+  debug(strFullLocator); 
+  memset(tx_buffer, 0, WSPR_SYMBOL_COUNT);  
+  //jtencode.wspr_encode(strCallsign, strLocator, pwr_output, tx_buffer);
+  //jtencode.wspr_encode("DL4OCE", "JO52", 11, tx_buffer);
+  
   //for(int i=0;i<sizeof(tx_buffer);i++) Serial.print(tx_buffer[i]);
   //Serial.println("");
   //Serial.println(tx_buffer);
 }
 
+String readParamGps() {
+  return(gpsSerial.readStringUntil(','));
+}
 
-void process_GPS( const gps_fix & fix ){
-  String tmpStr="";
-  float tmpLat=0, tmpLon=0;
-  if (fix.valid.location) {
-   /* tmpStr += (String) fix.satellites + " sats, ";
-    tmpLat = fix.latitudeL()/10000000.0;
-    tmpLon = fix.longitudeL()/10000000.0;
-    tmpStr += String(tmpLat, 7) + ", ";
-    tmpStr += String(tmpLon, 7) + ", ";
-    tmpStr += (String) fix.alt.whole + " m üNN";
-    tmpStr += "\n";
-    debug(tmpStr);*/
-    
-//    if ( ( tx_even && (fix.dateTime.minutes % 2 == 1) && (fix.dateTime.seconds == 55) ) || ( !tx_even && (fix.dateTime.minutes % 2 == 0) && (fix.dateTime.seconds == 55) ) ){
-//      Serial.print("preparation of upcoming transmission... ");
-      intTxFrequency = intBaseFrequency + random(200);
-      debug("New frequency: " + (String) intTxFrequency);
-      //setRTC();
-      //generateWSPRbuffer(tmpLat, tmpLon);
-      generateWSPRbuffer(fix.latitudeL()/10000000.0, fix.longitudeL()/10000000.0);
-      
-      debug("\n");
-//    }
-    updateLCD();
-    if ( ( tx_even && (fix.dateTime.minutes % 2 == 0) && (fix.dateTime.seconds == 0) ) || ( !tx_even && (fix.dateTime.minutes % 2 == 1) && (fix.dateTime.seconds == 0) ) ){
-      do_WSPR();
+bool getGps() {
+  gpsSerial.readStringUntil('$');
+/*  char car = 0;
+  while (car != '$') {
+    if (gpsSerial.available() > 0) {
+      car = gpsSerial.read();
+      debug((String)car);
     }
-    
-  } else {
-    if (toggle_gps_fix) debug("?");
-    else debug("-");
-    toggle_gps_fix = !toggle_gps_fix;
+  } //Wait for $ */
+  String nmea = readParamGps();
+  if (nmea == "GPGGA") {
+    gps_time = readParamGps().substring(0,6);
+    gpsSerial.readStringUntil('\n');
+  }
+  if (nmea == "GPRMC") {
+    readParamGps();
+    gps_status = readParamGps();
+    gps_strLat = readParamGps();
+    lat = gps_strLat.toFloat() / 100.0;
+    gps_ns = readParamGps();
+    gps_strLon = readParamGps();
+    lon = gps_strLon.toFloat() / 100.0;
+    gps_ew = readParamGps();
+    gpsSerial.readStringUntil('\n');
+  }
+  if (gps_status == "A"){
+    //updateLCD();
+    return true;
+  }
+  else {
+//    if (sizeof(nmea)>0) debug("*_");
+    return false;
   }
 }
  
-void loop() {
-  while (gps.available( gpsSerial )) {
-    fix = gps.read();
-    process_GPS( fix );
-  }
+void readGPS(){
+  int tmp_minutes, tmp_seconds;
+  //double tmpLat=0.0, tmpLon=0.0;
+  if (getGps()) {
+    //debug("GPS fix...\n");
+    tmp_minutes = gps_time.substring(2, 4).toInt();
+    tmp_seconds = gps_time.substring(4, 6).toInt();
+    debug("GPS time: ");
+    debug(gps_time);    
+    
+    debug(" tmp_minutes: ");
+    debug((String)tmp_minutes);
+    debug(" tmp_seconds: ");
+    debug((String)tmp_seconds);
+    
+    debug("\n");
+    if ( ( tx_even && (tmp_minutes % 2 == 1) && (tmp_seconds == 55) ) || ( !tx_even && (tmp_minutes % 2 == 0) && (tmp_seconds == 55) ) ){
+      intTxFrequency = intBaseFrequency + random(200);
+      debug("New frequency: " + (String)intTxFrequency);
+      generateWSPRbuffer(lat, lon);
+      debug("\n");
+    }
+    if ((tx_even && (tmp_minutes % 2 == 0) && (tmp_seconds == 0) ) || ( !tx_even && (tmp_minutes % 2 == 1) && (tmp_seconds == 0))) do_WSPR();
+  } else debug("*_");
+}
+ 
+void loop(){
+  readGPS();
+  delay(500);
 }
